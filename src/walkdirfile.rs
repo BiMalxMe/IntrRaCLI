@@ -6,6 +6,7 @@ pub mod waldirconfigs {
 
     pub fn getsrc_files() -> Vec<PathBuf> {
         WalkDir::new("./")
+        .max_depth(1)
             .into_iter()
             .filter_map(|entry| {
                 let entry = entry.ok()?;  // If error, return None
