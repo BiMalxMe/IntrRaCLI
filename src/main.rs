@@ -1,23 +1,35 @@
-use std::{ fs::read_to_string, io, path::PathBuf};
+use std::{ fs::read_to_string, io, path:: PathBuf};
 
 use crossterm::{
-    event::{self, Event, KeyCode}, execute, terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen}
+    event::{ self, Event, KeyCode}, execute, terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen}
 };
 use ratatui::{
-    layout::{Constraint, Direction, Layout}, prelude::CrosstermBackend, style::{Color, Style}, widgets::{Block, Borders, List, ListItem, ListState, Paragraph}, Terminal
+    layout::{Constraint, Direction, Layout}, prelude::CrosstermBackend, style::{Color, Style},  widgets::{Block, Borders, List, ListItem, ListState, Paragraph}, Terminal
 };
 
 pub mod walkdirfile;
 struct App {
     selected: usize,
     data: Vec<PathBuf>,
+    currentpath : PathBuf
 }
 //implemeting the steuct to get functions like prev and next and new
 impl App {
-    fn new(data: Vec<PathBuf>) -> Self {
+    fn new(initial_path: PathBuf) -> Self {
+        let default_path = if initial_path.as_os_str().is_empty() {
+            PathBuf::from("./") // Default to current directory if initial_path is empty
+        } else {
+            initial_path
+        };
+
+        // Populate data using the default_path
+        let data = walkdirfile::waldirconfigs::get_dir_datas(default_path.clone());
+
         App {
             selected: 0,
-            data: data,
+            //data taken from the path
+            data, 
+            currentpath: default_path,
         }
     }
     fn previous(&mut self) {
@@ -30,23 +42,30 @@ impl App {
             self.selected += 1;
         }
     }
+    fn update_app(&mut self){
+            //get the file from the waldirfile.rs
+        self.data = walkdirfile::waldirconfigs::get_dir_datas(self.currentpath.clone());
+        self.selected = 0;
+    }
 }
 
 fn main() -> std::io::Result<()> {
     // Contents of the file
     let mut filedata = String::new();
     //Only on the first enter it displays the datas
-    let mut entered = false;
-    //get the file from the waldirfile.rs
-    let filelist = walkdirfile::waldirconfigs::getsrc_files();
+    let mut entered: bool = false;
+    let mut error_message : Option<String> = None;
+    //create a new instance of the struct with own vecs
+    // use dir crate to go to the main path of the mac machine
+    let mut app = App::new( dirs::home_dir().unwrap_or_else(|| PathBuf::from("./")).into());
 
-    // if the file has no content then print the error
-    if filelist.is_empty() {
+    let filelist  = app.data.clone();
+
+      // if the file has no content then print the error
+      if filelist.is_empty() {
         eprintln!(" No files found ");
         return Ok(());
     }
-    //create a new instance of the struct with own vecs
-    let mut app = App::new(filelist);
 
     // for efficiency of the keyword
     enable_raw_mode()?;
@@ -61,6 +80,34 @@ fn main() -> std::io::Result<()> {
 
     // looping such that the value can be hold
     loop{
+
+         // Handle directory change BEFORE rendering
+         if entered {
+            let selected = app.data.get(app.selected);
+            if let Some(path) = selected {
+                if path.is_dir() {
+                    app.currentpath = path.clone();
+                    app.update_app();
+                    entered = false;
+                    // skip render until updated
+                    continue; 
+                } else {
+                    // File case: Try to read
+                    match read_to_string(path) {
+                        Ok(content) => {
+                            filedata = content;
+                            error_message = None;
+                        }
+                        Err(e) => {
+                            error_message = Some(format!("Error reading file: {}", e));
+                            filedata.clear();
+                        }
+                    }
+                }
+            }
+            entered = false;
+        }
+
     terminal.draw(|f| {
         let size = f.area();
         
@@ -89,24 +136,11 @@ fn main() -> std::io::Result<()> {
          .highlight_symbol("-> ")
          .highlight_style(Style::default().bg(Color::Cyan).fg(Color::Blue));
         
-        if entered{
 
             // get the current selected ifilename
             let selectedfile = &app.data[app.selected];
 
-            //read and ge thte content of the filename
-            let readfile = read_to_string(selectedfile);
-            
-            // if error message occurs should be handled so intialized for the error handling
-            let mut error_message : Option<String> = None;
-            match readfile {
-                // if file open sucessfully filedata captures the content else the error_message variable
-                //gets the error message and stores it
-                Ok(data) => filedata = data,
-                Err(e) => {
-                    error_message = Some(format!("Error reading file: {}", e));
-                }
-            }
+           
           // extract the filename from the pathBuf
             let filenameonly = selectedfile.file_name().unwrap_or_default().to_string_lossy();
            
@@ -137,7 +171,7 @@ fn main() -> std::io::Result<()> {
                 // if the error is not there then shos the content
             f.render_widget(para, chunks[1]);
         }
-        }
+        
 
         // should also give the state as it is a dynamic as selected moves
          let mut list_state = ListState::default();
@@ -157,6 +191,19 @@ fn main() -> std::io::Result<()> {
           // set the global entered true such that the file content or the error displays
           KeyCode::Enter => {
            entered = true;
+          },
+          KeyCode::Char('b') => {
+            //we should use the parent() to find the files parent
+            // if the parent path exist then it rns
+            if let Some(parent) = app.currentpath.parent(){
+
+                // current path will be the parents path
+                // convert into th pathbuf as the currentpath expects
+                app.currentpath = parent.to_path_buf();
+
+                //update the apps latest changes
+                app.update_app();
+            }
           }
           _ => {}
       }
