@@ -6,12 +6,10 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{
-    layout::{Constraint, Direction, Layout},
-    prelude::CrosstermBackend,
-    style::{Color, Style},
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
-    Terminal,
+     layout::{Constraint, Direction, Layout}, prelude::CrosstermBackend, style::{Color, Style}, widgets::{Block, Borders, List, ListItem, ListState, Paragraph}, Terminal
 };
+use crossterm::event::KeyModifiers;
+
 
 pub mod walkdirfile;
 
@@ -90,6 +88,7 @@ fn main() -> std::io::Result<()> {
     // Create the terminal with standard output system
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend).unwrap();
+    let copyinstance = CopyFiles::new();
 
     // looping such that the value can be hold
     loop {
@@ -188,17 +187,16 @@ fn main() -> std::io::Result<()> {
             // rendering
             f.render_stateful_widget(list, chunks[0], &mut list_state);
         })?;
-
         if let Event::Key(key) = event::read()? {
-            match key.code {
-                KeyCode::Char('q') => break,
-                KeyCode::Down => app.next(),
-                KeyCode::Up => app.previous(),
+            match (key.code,key.modifiers) {
+                (KeyCode::Char('q'),KeyModifiers::NONE) => break,
+                (KeyCode::Down,KeyModifiers::NONE) => app.next(),
+                (KeyCode::Up,KeyModifiers::NONE) => app.previous(),
                 // set the global entered true such that the file content or the error displays
-                KeyCode::Enter => {
+                (KeyCode::Enter,KeyModifiers::NONE) => {
                     entered = true;
                 }
-                KeyCode::Char('b') => {
+                (KeyCode::Char('b'),KeyModifiers::NONE) => {
                     //we should use the parent() to find the files parent
                     // if the parent path exist then it rns
                     if let Some(parent) = app.currentpath.parent() {
@@ -210,6 +208,26 @@ fn main() -> std::io::Result<()> {
                         app.update_app();
                     }
                 }
+                 
+        // Ctrl+C implementation
+        (KeyCode::Char('c'), KeyModifiers::CONTROL) => {
+            if let Some((_, path)) = app.data.get(app.selected) {
+                if path.is_file() {
+                    match std::fs::read_to_string(path) {
+                        Ok(content) => {
+                            copyinstance.update_all(content, path.to_path_buf());
+                            println!("Copied file content: {} bytes", content.len());
+                        },
+                        Err(e) => {
+                            eprintln!("Failed to read file: {}", e);
+                        }
+                    }
+                } else {
+                    eprintln!("Cannot copy directory content");
+                }
+            }
+        },
+       
                 _ => {}
             }
         }
