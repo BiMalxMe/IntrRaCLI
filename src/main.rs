@@ -1,4 +1,5 @@
-use std::{fs::read_to_string, io, path::PathBuf};
+use std::{fs::{read_to_string, File}, io, path::PathBuf};
+use std::io::Write;
 
 use crossterm::{
     event::{self, Event, KeyCode},
@@ -12,6 +13,37 @@ use crossterm::event::KeyModifiers;
 
 
 pub mod walkdirfile;
+struct CopyFiles {
+    data: Option<String>,
+    filename: Option<String>,
+}
+
+impl CopyFiles {
+    // for inintailizing with empty paramts for the top level flobal declaration
+    pub fn new() -> Self {
+        CopyFiles {
+            data: None,
+            filename: None,
+        }
+    }
+
+    //update the self with the main data 
+    pub fn update_all(&mut self, new_data: String, new_filename: Option<PathBuf>) {
+        let filepath: Option<String> = new_filename.and_then(|path_buf| {
+            path_buf.file_name()
+                .and_then(|os_str| os_str.to_str())
+                .map(|s| s.to_string())
+        });
+
+        // assigns the new data, wrapping it in Some
+        self.data = Some(new_data);
+
+        // assigns the new filename
+        self.filename = filepath; // filepath is already Option<String>
+    }
+
+
+}
 
 struct App {
     selected: usize,
@@ -88,7 +120,7 @@ fn main() -> std::io::Result<()> {
     // Create the terminal with standard output system
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend).unwrap();
-    let copyinstance = CopyFiles::new();
+    let mut copyinstance = CopyFiles::new();
 
     // looping such that the value can be hold
     loop {
@@ -215,8 +247,7 @@ fn main() -> std::io::Result<()> {
                 if path.is_file() {
                     match std::fs::read_to_string(path) {
                         Ok(content) => {
-                            copyinstance.update_all(content, path.to_path_buf());
-                            println!("Copied file content: {} bytes", content.len());
+                            copyinstance.update_all(content, Some(path.clone()));
                         },
                         Err(e) => {
                             eprintln!("Failed to read file: {}", e);
@@ -224,10 +255,47 @@ fn main() -> std::io::Result<()> {
                     }
                 } else {
                     eprintln!("Cannot copy directory content");
-                }
+                } 
             }
         },
-       
+        // on clicking the ctrl
+        (KeyCode::Char('v'), KeyModifiers::CONTROL) => {
+            //get the filename and content from the file we copied from
+            //can see the logic in the ctrl+c
+
+            if let (Some(filename), Some(content)) = (&copyinstance.filename, &copyinstance.data) {
+             //get the current path where we want to paste
+             // cloning it such that old path shouldnot be changes
+             //for eg
+             //new_path becomes something like /current/directory/filename.txt
+            // app.currentpath remains /current/directory
+                let mut new_path = app.currentpath.clone();
+                new_path.push(filename);
+        
+        //pattern matching
+                match File::create(&new_path) {
+                    //if file exist and ther is no error
+                    Ok(mut file) => {
+                        //This code tries to write content to a file and checks
+                        // for errors. If it fails, it prints an error message to stderr.
+                        if let Err(e) = file.write_all(content.as_bytes()) {
+                            eprintln!("Failed to write to file: {}", e);
+                        }
+                        //after writing update and get the new waldir filelist
+                        app.update_app();
+
+                    }
+                    //if error printit
+                    Err(e) => {
+                        eprintln!("Failed to create file: {}", e);
+                    }
+                }
+            } else {
+                //if something fails print
+                eprintln!("No file content to paste.");
+            }
+        }
+        //handle other innecessary keypress
                 _ => {}
             }
         }
