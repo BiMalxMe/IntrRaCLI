@@ -99,7 +99,38 @@ impl App {
                 self.renamedinput.pop();
             }
             KeyCode::Enter => {
-                
+                if !self.renamedinput.is_empty() {
+                    if let Some((_, old_path)) = self.data.get(self.selected) {
+                        // Extract file extension
+                        let extension = old_path.extension().and_then(|ext| ext.to_str());
+            
+                        // Check if the renamed input already contains an extension
+                        let new_path = {
+                            let mut new_filename = self.renamedinput.clone();
+                            if !new_filename.contains('.') {
+                                if let Some(ext) = extension {
+                                    new_filename.push('.');
+                                    new_filename.push_str(ext);
+                                }
+                            }
+                            old_path.with_file_name(new_filename)
+                        };
+                        println!("Renaming: {:?} -> {:?}", old_path, new_path);
+
+                        match std::fs::rename(old_path, &new_path) {
+                            Ok(_) => {
+                                let current_index = self.selected;
+                                self.update_app();
+                                self.selected = current_index.min(self.data.len().saturating_sub(1));
+                                self.selectedfile = Some(new_path);
+                            }
+                            Err(e) => {
+                                eprintln!("Error renaming file: {}", e);
+                            }
+                        }
+                    }
+                }
+                self.toggle_dialog();
             }
             _ => {}
         }
@@ -262,7 +293,7 @@ fn main() -> std::io::Result<()> {
                     .style(Style::default().bg(Color::DarkGray));
 
                 let text = Text::from(vec![
-                    Line::from("Type your text below:"),
+                    Line::from("Type your text to rename:"),
                     Line::from(""),
                     Line::from(app.renamedinput.as_str()),
                     Line::from(""),
@@ -281,6 +312,7 @@ fn main() -> std::io::Result<()> {
             if app.dialogueboxappear {
                 match key.code {
                     KeyCode::Esc => app.toggle_dialog(),
+                    //othre key event are handled in the handle_dialog_input fn in implementation
                     _ => app.handle_dialog_input(key),
                 }
                 continue;
@@ -325,7 +357,6 @@ fn main() -> std::io::Result<()> {
                 }
                 // Ctrl+R implementation
                 (KeyCode::Char('r'), KeyModifiers::CONTROL) => {
-                    //will add the main logic later
                     app.toggle_dialog();
                 }
                 // on clicking the ctrl
