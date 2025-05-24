@@ -20,8 +20,8 @@ This is a terminal user interface (TUI) file explorer written in Rust, utilizing
 1.  **Clone the repository:**
 
     ```bash
-    git clone <repository_url> # Replace <repository_url> with the actual URL
-    cd <repository_name>
+    git clone https://github.com/BiMalxMe/IntrRaCLI # Replace <repository_url> with the actual URL
+    cd IntrRaCLI
     ```
 
 2.  **Run the application:**
@@ -39,7 +39,8 @@ This is a terminal user interface (TUI) file explorer written in Rust, utilizing
     * If a directory is selected, enter that directory.
     * If a file is selected, display its content.
 * **`b`:** Go back to the parent directory.
-* **`Ctrl+C`:** Copy the content of the currently selected file. (Note: This currently only prints to the console that the content has been copied, it doesn't paste to your system clipboard.)
+* **`Ctrl+C`:** Copy the file which is curretly selected. 
+* **`Ctrl+V`:** Paste that copied file which was earlier copied from the ctrl V command.
 * **`q`:** Quit the application.
 
 ---

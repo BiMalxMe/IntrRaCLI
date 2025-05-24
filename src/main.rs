@@ -1,16 +1,24 @@
-use std::{fs::{read_to_string, File}, io, path::PathBuf};
 use std::io::Write;
+use std::{
+    fs::{File, read_to_string},
+    io,
+    path::PathBuf,
+};
 
+use crossterm::event::KeyModifiers;
 use crossterm::{
-    event::{self, Event, KeyCode},
+    event::{self, Event, KeyCode, KeyEvent},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use ratatui::{
-     layout::{Constraint, Direction, Layout}, prelude::CrosstermBackend, style::{Color, Style}, widgets::{Block, Borders, List, ListItem, ListState, Paragraph}, Terminal
+    Terminal,
+    layout::{Constraint, Direction, Layout},
+    prelude::CrosstermBackend,
+    style::{Color, Style},
+    text::{Line, Text},
+    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph},
 };
-use crossterm::event::KeyModifiers;
-
 
 pub mod walkdirfile;
 struct CopyFiles {
@@ -27,10 +35,11 @@ impl CopyFiles {
         }
     }
 
-    //update the self with the main data 
+    //update the self with the main data
     pub fn update_all(&mut self, new_data: String, new_filename: Option<PathBuf>) {
         let filepath: Option<String> = new_filename.and_then(|path_buf| {
-            path_buf.file_name()
+            path_buf
+                .file_name()
                 .and_then(|os_str| os_str.to_str())
                 .map(|s| s.to_string())
         });
@@ -41,15 +50,15 @@ impl CopyFiles {
         // assigns the new filename
         self.filename = filepath; // filepath is already Option<String>
     }
-
-
 }
 
 struct App {
     selected: usize,
-    data: Vec<(String,PathBuf)>,
+    data: Vec<(String, PathBuf)>,
     currentpath: PathBuf,
     selectedfile: Option<PathBuf>,
+    dialogueboxappear: bool,
+    renamedinput: String,
 }
 
 //implemeting the steuct to get functions like prev and next and new
@@ -70,6 +79,29 @@ impl App {
             data,
             currentpath: default_path,
             selectedfile: None,
+            dialogueboxappear: false,
+            renamedinput: String::new(),
+        }
+    }
+    //for toggling the value of the
+    fn toggle_dialog(&mut self) {
+        self.dialogueboxappear = !self.dialogueboxappear;
+        if !self.dialogueboxappear {
+            self.renamedinput.clear();
+        }
+    }
+    fn handle_dialog_input(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Char(c) => {
+                self.renamedinput.push(c);
+            }
+            KeyCode::Backspace => {
+                self.renamedinput.pop();
+            }
+            KeyCode::Enter => {
+                
+            }
+            _ => {}
         }
     }
 
@@ -100,7 +132,11 @@ fn main() -> std::io::Result<()> {
     let mut error_message: Option<String> = None;
     //create a new instance of the struct with own vecs
     // use dir crate to go to the main path of the mac machine
-    let mut app = App::new(dirs::home_dir().unwrap_or_else(|| PathBuf::from("./")).into());
+    let mut app = App::new(
+        dirs::home_dir()
+            .unwrap_or_else(|| PathBuf::from("./"))
+            .into(),
+    );
 
     let filelist = app.data.clone();
 
@@ -194,9 +230,9 @@ fn main() -> std::io::Result<()> {
             // if the error is there then there is no possibility for displaying the content
             // so if the error occurrs then replacing the filecontent rendering logic with
             // the error message -> Like the error is shown as a content with title Error when
-            // the error occcurs 
-            // Such that the error could be handled easily and they can be seen in the terminal everywjere 
-            // and just putting the error into its own section 
+            // the error occcurs
+            // Such that the error could be handled easily and they can be seen in the terminal everywjere
+            // and just putting the error into its own section
             //Either error or filecontent can be shown at a time
 
             if let Some(err) = &error_message {
@@ -213,22 +249,51 @@ fn main() -> std::io::Result<()> {
             // should also give the state as it is a dynamic as selected moves
             let mut list_state = ListState::default();
 
-            // getting the currently selected 
+            // getting the currently selected
             list_state.select(Some(app.selected));
 
             // rendering
             f.render_stateful_widget(list, chunks[0], &mut list_state);
+
+            if app.dialogueboxappear {
+                let block = Block::default()
+                    .title("Dialog (ESC to close)")
+                    .borders(Borders::ALL)
+                    .style(Style::default().bg(Color::DarkGray));
+
+                let text = Text::from(vec![
+                    Line::from("Type your text below:"),
+                    Line::from(""),
+                    Line::from(app.renamedinput.as_str()),
+                    Line::from(""),
+                    Line::from("Backspace: Delete | ESC: Close"),
+                ]);
+
+                let paragraph = Paragraph::new(text).block(block);
+
+                // Calculate centered position
+                let area = centered_rect(60, 25, size);
+                f.render_widget(Clear, area); // Clear the area first
+                f.render_widget(paragraph, area);
+            }
         })?;
         if let Event::Key(key) = event::read()? {
-            match (key.code,key.modifiers) {
-                (KeyCode::Char('q'),KeyModifiers::NONE) => break,
-                (KeyCode::Down,KeyModifiers::NONE) => app.next(),
-                (KeyCode::Up,KeyModifiers::NONE) => app.previous(),
+            if app.dialogueboxappear {
+                match key.code {
+                    KeyCode::Esc => app.toggle_dialog(),
+                    _ => app.handle_dialog_input(key),
+                }
+                continue;
+            }
+            match (key.code, key.modifiers) {
+                (KeyCode::Char('q'), KeyModifiers::NONE) => break,
+                (KeyCode::Down, KeyModifiers::NONE) => app.next(),
+                (KeyCode::Up, KeyModifiers::NONE) => app.previous(),
                 // set the global entered true such that the file content or the error displays
-                (KeyCode::Enter,KeyModifiers::NONE) => {
+                (KeyCode::Enter, KeyModifiers::NONE) => {
                     entered = true;
                 }
-                (KeyCode::Char('b'),KeyModifiers::NONE) => {
+                (KeyCode::Char('b'), KeyModifiers::NONE) => {
                     //we should use the parent() to find the files parent
                     // if the parent path exist then it rns
                     if let Some(parent) = app.currentpath.parent() {
@@ -240,62 +305,69 @@ fn main() -> std::io::Result<()> {
                         app.update_app();
                     }
                 }
-                 
-        // Ctrl+C implementation
-        (KeyCode::Char('c'), KeyModifiers::CONTROL) => {
-            if let Some((_, path)) = app.data.get(app.selected) {
-                if path.is_file() {
-                    match std::fs::read_to_string(path) {
-                        Ok(content) => {
-                            copyinstance.update_all(content, Some(path.clone()));
-                        },
-                        Err(e) => {
-                            eprintln!("Failed to read file: {}", e);
-                        }
-                    }
-                } else {
-                    eprintln!("Cannot copy directory content");
-                } 
-            }
-        },
-        // on clicking the ctrl
-        (KeyCode::Char('v'), KeyModifiers::CONTROL) => {
-            //get the filename and content from the file we copied from
-            //can see the logic in the ctrl+c
 
-            if let (Some(filename), Some(content)) = (&copyinstance.filename, &copyinstance.data) {
-             //get the current path where we want to paste
-             // cloning it such that old path shouldnot be changes
-             //for eg
-             //new_path becomes something like /current/directory/filename.txt
-            // app.currentpath remains /current/directory
-                let mut new_path = app.currentpath.clone();
-                new_path.push(filename);
-        
-        //pattern matching
-                match File::create(&new_path) {
-                    //if file exist and ther is no error
-                    Ok(mut file) => {
-                        //This code tries to write content to a file and checks
-                        // for errors. If it fails, it prints an error message to stderr.
-                        if let Err(e) = file.write_all(content.as_bytes()) {
-                            eprintln!("Failed to write to file: {}", e);
+                // Ctrl+C implementation
+                (KeyCode::Char('c'), KeyModifiers::CONTROL) => {
+                    if let Some((_, path)) = app.data.get(app.selected) {
+                        if path.is_file() {
+                            match std::fs::read_to_string(path) {
+                                Ok(content) => {
+                                    copyinstance.update_all(content, Some(path.clone()));
+                                }
+                                Err(e) => {
+                                    eprintln!("Failed to read file: {}", e);
+                                }
+                            }
+                        } else {
+                            eprintln!("Cannot copy directory content");
                         }
-                        //after writing update and get the new waldir filelist
-                        app.update_app();
-
-                    }
-                    //if error printit
-                    Err(e) => {
-                        eprintln!("Failed to create file: {}", e);
                     }
                 }
-            } else {
-                //if something fails print
-                eprintln!("No file content to paste.");
-            }
-        }
-        //handle other innecessary keypress
+                // Ctrl+R implementation
+                (KeyCode::Char('r'), KeyModifiers::CONTROL) => {
+                    //will add the main logic later
+                    app.toggle_dialog();
+                }
+                // on clicking the ctrl
+                (KeyCode::Char('v'), KeyModifiers::CONTROL) => {
+                    //get the filename and content from the file we copied from
+                    //can see the logic in the ctrl+c
+
+                    if let (Some(filename), Some(content)) =
+                        (&copyinstance.filename, &copyinstance.data)
+                    {
+                        //get the current path where we want to paste
+                        // cloning it such that old path shouldnot be changes
+                        //for eg
+                        //new_path becomes something like /current/directory/filename.txt
+                        // app.currentpath remains /current/directory
+                        let mut new_path = app.currentpath.clone();
+                        new_path.push(filename);
+
+                        //pattern matching
+                        match File::create(&new_path) {
+                            //if file exist and ther is no error
+                            Ok(mut file) => {
+                                //This code tries to write content to a file and checks
+                                // for errors. If it fails, it prints an error message to stderr.
+                                if let Err(e) = file.write_all(content.as_bytes()) {
+                                    eprintln!("Failed to write to file: {}", e);
+                                }
+                                //after writing update and get the new waldir filelist
+                                app.update_app();
+                            }
+                            //if error printit
+                            Err(e) => {
+                                eprintln!("Failed to create file: {}", e);
+                            }
+                        }
+                    } else {
+                        //if something fails print
+                        eprintln!("No file content to paste.");
+                    }
+                }
+
+                //handle other innecessary keypress
                 _ => {}
             }
         }
@@ -307,4 +379,27 @@ fn main() -> std::io::Result<()> {
 
     // return the successfull executoin msg
     Ok(())
+}
+fn centered_rect(
+    percent_x: u16,
+    percent_y: u16,
+    r: ratatui::prelude::Rect,
+) -> ratatui::prelude::Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(r);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(popup_layout[1])[1]
 }
