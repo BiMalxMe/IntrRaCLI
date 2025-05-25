@@ -79,12 +79,14 @@ impl App {
             data,
             currentpath: default_path,
             selectedfile: None,
+            //added some fields for the reneme logic
             dialogueboxappear: false,
             renamedinput: String::new(),
         }
     }
     //for toggling the value of the
     fn toggle_dialog(&mut self) {
+        //while toggle is called use negation of the value
         self.dialogueboxappear = !self.dialogueboxappear;
         if !self.dialogueboxappear {
             self.renamedinput.clear();
@@ -98,33 +100,66 @@ impl App {
             KeyCode::Backspace => {
                 self.renamedinput.pop();
             }
+
+            //if enter is pressed when the inner rename box is opened
             KeyCode::Enter => {
+                //if the renamedinput is not empty
                 if !self.renamedinput.is_empty() {
+                    //get the oldpath from the vec in data of the selected
                     if let Some((_, old_path)) = self.data.get(self.selected) {
                         // Extract file extension
                         let extension = old_path.extension().and_then(|ext| ext.to_str());
-            
+
                         // Check if the renamed input already contains an extension
                         let new_path = {
+                            //get the renamed file name prefix of the .extension
                             let mut new_filename = self.renamedinput.clone();
+
+                            //if the user is not giving a extension while renaming
+                            // then you should use the extension as the old path had
                             if !new_filename.contains('.') {
+                                //get the extension
                                 if let Some(ext) = extension {
+                                    //add the . after the newfilname renmaed
                                     new_filename.push('.');
+
+                                    //push the extension
                                     new_filename.push_str(ext);
                                 }
                             }
+                            //this created the filename with the same path but with differnt filename
+
+                            //for E.g
+                            //
+                            // let old_path = Path::new("/home/user/documents/old_name.txt");
+                            // let new_path = old_path.with_file_name("new_name.txt");
+
+                            // println!("{:?}", new_path);
+                            // Output: "/home/user/documents/new_name.txt"
                             old_path.with_file_name(new_filename)
                         };
-                        println!("Renaming: {:?} -> {:?}", old_path, new_path);
 
+                        //change old path to new path
                         match std::fs::rename(old_path, &new_path) {
                             Ok(_) => {
+                                //get the index where the list is hovered upon
                                 let current_index = self.selected;
+
+                                //update and get the new filelist from walkdir
                                 self.update_app();
-                                self.selected = current_index.min(self.data.len().saturating_sub(1));
+
+                                //after new renmaed update
+                                //change selected to previoduly renamed file index
+                                
+                                //max is currentindex and min is final index of the data
+                                self.selected =
+                                    current_index.min(self.data.len().saturating_sub(1));
+
+                                //that new path file should be selected 
                                 self.selectedfile = Some(new_path);
                             }
                             Err(e) => {
+                                //if errror occurs
                                 eprintln!("Error renaming file: {}", e);
                             }
                         }
@@ -287,24 +322,26 @@ fn main() -> std::io::Result<()> {
             f.render_stateful_widget(list, chunks[0], &mut list_state);
 
             if app.dialogueboxappear {
+                // Define the dialog block with title, borders, and background color
                 let block = Block::default()
-                    .title("Dialog (ESC to close)")
+                    .title(" Rename Dialog (ESC to close) ")
                     .borders(Borders::ALL)
                     .style(Style::default().bg(Color::DarkGray));
 
+                // Prepare the text content for the paragraph
                 let text = Text::from(vec![
-                    Line::from("Type your text to rename:"),
+                    Line::from(" Type your file/folder name to rename:"),
                     Line::from(""),
-                    Line::from(app.renamedinput.as_str()),
+                    Line::from(format!(" > {}", app.renamedinput)),
                     Line::from(""),
-                    Line::from("Backspace: Delete | ESC: Close"),
+                    Line::from(" Backspace: Delete    |    ESC: Close"),
                 ]);
 
                 let paragraph = Paragraph::new(text).block(block);
 
-                // Calculate centered position
+                // Center the dialog in the terminal
                 let area = centered_rect(60, 25, size);
-                f.render_widget(Clear, area); // Clear the area first
+                f.render_widget(Clear, area); // Clear background for transparency
                 f.render_widget(paragraph, area);
             }
         })?;
@@ -412,25 +449,37 @@ fn main() -> std::io::Result<()> {
     Ok(())
 }
 fn centered_rect(
+    //   Width of the centered area as a percentage of the total width
     percent_x: u16,
+
+    // Height of the centered area as a percentage of the total height
     percent_y: u16,
+
+    // The full outer rectangle (usually the entire terminal area)
     r: ratatui::prelude::Rect,
 ) -> ratatui::prelude::Rect {
+    // First, split the outer rectangle vertically into 3 parts:
+    // Top margin, center area, and bottom margin
     let popup_layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Percentage((100 - percent_y) / 2),
-            Constraint::Percentage(percent_y),
-            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage((100 - percent_y) / 2), // Top margin
+            Constraint::Percentage(percent_y),             // Center height
+            Constraint::Percentage((100 - percent_y) / 2), // Bottom margin
         ])
+        // apply the vertical layout split on the input rect
         .split(r);
 
+    //  split the center vertical area horizontally into 3 parts:
+    // Left margin, center , and right widths
     Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage((100 - percent_x) / 2),
-            Constraint::Percentage(percent_x),
-            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage((100 - percent_x) / 2), // Left
+            Constraint::Percentage(percent_x),             // Center
+            Constraint::Percentage((100 - percent_x) / 2), // Right
         ])
+        //means
+        // "Take the middle vertical section, split it horizontally, and return the middle horizontal section."
         .split(popup_layout[1])[1]
 }
