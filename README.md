@@ -1,64 +1,80 @@
-# Rust TUI File Explorer
 
-This is a terminal user interface (TUI) file explorer written in Rust, utilizing `crossterm` for terminal manipulation and `ratatui` for UI rendering.
+# 📁 IntrRaCLI – Terminal File Explorer in Rust 🦀
 
----
-
-## Features
-
-* **Navigation:** Browse directories and files using arrow keys.
-* **Directory Traversal:** Enter directories to view their contents, and go back to parent directories.
-* **File Viewing:** Select a file to display its content within the terminal.
-* **Error Handling:** Displays error messages if a file cannot be read.
-* **Copy File Content (Ctrl+C):** Copy the content of a selected file.
-* **Hidden File Exclusion:** Automatically hides dotfiles (files starting with `.`).
+IntrRaCLI is a simple yet powerful Terminal User Interface (TUI) file explorer written in Rust. It combines the flexibility of `ratatui` for rendering UI components with the control of `crossterm` for handling terminal interactions. Whether you're browsing, previewing, or managing files directly from your terminal, IntrRaCLI has got your back.
 
 ---
 
-## Installation and Running
+## ✨ Features
 
-1.  **Clone the repository:**
-
-    ```bash
-    git clone https://github.com/BiMalxMe/IntrRaCLI # Replace <repository_url> with the actual URL
-    cd IntrRaCLI
-    ```
-
-2.  **Run the application:**
-
-    ```bash
-    cargo run
-    ```
+- 🚀 **Keyboard Navigation** – Use arrow keys to smoothly navigate through files and folders.
+- 📂 **Directory Traversal** – Enter and exit directories effortlessly.
+- 📄 **File Preview** – View file contents directly within the terminal.
+- ⚠️ **Error Handling** – Graceful handling of unreadable files with clear messages.
+- 📋 **Copy File (Ctrl+C)** – Copy the selected file’s content with a single shortcut.
+- 📥 **Paste File (Ctrl+V)** – Paste the copied file into the current directory.
+- 🛑 **Exclude Hidden Files** – Automatically hides dotfiles (like `.gitignore`).
+- 📝 **Rename Files/Folders (Ctrl+R)** – Rename items using an intuitive pop-up dialog.
 
 ---
 
-## Usage
+## 🛠️ Getting Started
 
-* **`Up Arrow` / `Down Arrow`:** Navigate through the file and directory list.
-* **`Enter`:**
-    * If a directory is selected, enter that directory.
-    * If a file is selected, display its content.
-* **`b`:** Go back to the parent directory.
-* **`Ctrl+C`:** Copy the file which is curretly selected. 
-* **`Ctrl+V`:** Paste that copied file which was earlier copied from the ctrl V command.
-* **`q`:** Quit the application.
+### 1. Clone the repository
 
----
+```bash
+git clone https://github.com/BiMalxMe/IntrRaCLI
+cd IntrRaCLI
+```
 
-## Code Structure
+### 2. Run the application
 
-* **`main.rs`:** Contains the main application logic, TUI rendering, and event handling.
-* **`walkdirfile/mod.rs` (or `walkdirfile/waldirconfigs.rs`):** Contains the `get_dir_datas` function, which uses the `walkdir` crate to list directory contents, excluding hidden files.
+```bash
+cargo run
+```
 
 ---
 
-## Dependencies
+## 🎮 Controls
 
-This project relies on the following Rust crates:
+| Key            | Action                                             |
+|----------------|----------------------------------------------------|
+| ↑ / ↓          | Move up or down the file list                      |
+| Enter          | Open a folder or preview a file                    |
+| b              | Go back to the parent directory                    |
+| Ctrl+C         | Copy the currently selected file                   |
+| Ctrl+V         | Paste the copied file into the current directory   |
+| Ctrl+R         | Rename the selected file or folder                 |
+| q              | Quit the application                               |
 
-* **`crossterm`**: For terminal event handling and low-level terminal manipulation.
-* **`ratatui`**: For building the terminal user interface.
-* **`walkdir`**: For efficiently traversing directory trees.
-* **`dirs`**: For cross-platform handling of user directories (e.g., home directory).
+---
 
-You can find these dependencies listed in `Cargo.toml`.
+## 📁 Project Structure
+
+- **`main.rs`** – Handles core logic, UI rendering, and event handling.
+- **`walkdirfile/mod.rs`** – Contains `get_dir_datas`, which fetches directory entries using `walkdir`, excluding hidden files.
+
+---
+
+## 📦 Dependencies
+
+IntrRaCLI is powered by these awesome Rust crates:
+
+- **`ratatui`** – Elegant UI rendering in the terminal
+- **`crossterm`** – Terminal input/output and event management
+- **`walkdir`** – Efficient directory traversal
+- **`dirs`** – Cross-platform support for standard system directories
+
+Check `Cargo.toml` for exact versions and additional dependencies.
+
+---
+
+## 🙌 Contribute
+
+Pull requests and feedback are welcome! Feel free to fork the repo and open an issue or PR.
+
+---
+
+## 📜 License
+
+This project is licensed under the MIT License.
