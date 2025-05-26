@@ -59,6 +59,9 @@ struct App {
     selectedfile: Option<PathBuf>,
     dialogueboxappear: bool,
     renamedinput: String,
+    // New field for scroll position
+    scroll: u16,
+    filesmaxlines : u16
 }
 
 //implemeting the steuct to get functions like prev and next and new
@@ -82,6 +85,8 @@ impl App {
             //added some fields for the reneme logic
             dialogueboxappear: false,
             renamedinput: String::new(),
+            scroll: 0,
+            filesmaxlines: 0
         }
     }
     //for toggling the value of the
@@ -150,12 +155,12 @@ impl App {
 
                                 //after new renmaed update
                                 //change selected to previoduly renamed file index
-                                
+
                                 //max is currentindex and min is final index of the data
                                 self.selected =
                                     current_index.min(self.data.len().saturating_sub(1));
 
-                                //that new path file should be selected 
+                                //that new path file should be selected
                                 self.selectedfile = Some(new_path);
                             }
                             Err(e) => {
@@ -187,6 +192,26 @@ impl App {
         //get the file from the waldirfile.rs
         self.data = walkdirfile::waldirconfigs::get_dir_datas(self.currentpath.clone());
         self.selected = 0;
+    }
+
+    // Scroll up by one line
+    fn scroll_up(&mut self) {
+        if self.scroll > 0 {
+            self.scroll -= 1;
+        }
+    }
+
+    // Scroll down by one line
+    fn scroll_down(&mut self) {
+        // Prevent scrolling beyond the content
+        if self.scroll < self.filesmaxlines.saturating_sub(1) {
+            self.scroll += 1;
+        }
+    }
+
+    // Reset scroll when opening a new file
+    fn reset_scroll(&mut self) {
+        self.scroll = 0;
     }
 }
 
@@ -286,11 +311,27 @@ fn main() -> std::io::Result<()> {
                 || "No file selected".to_string(), // If app.selectedfile is None
                 |path_buf| path_buf.to_string_lossy().into_owned(), // If Some(path_buf), convert to owned String
             );
+            // file ko line
+            let content_lines = filedata.lines().count() as u16;
+            // Terminal ko size
+            let content_area_height = chunks[1].height.saturating_sub(2); // Subtract 2 for top/bottom borders
+
+            app.filesmaxlines = content_lines;
+            // Update scroll_down boundary
+            // can be zero or the value (excedding lines below terminal)
+            let max_scroll = content_lines.saturating_sub(content_area_height);
+            if app.scroll > max_scroll {
+                app.scroll = max_scroll;
+            }
 
             // Make a para of the file content such that the filecontent gets good visual design and all
             let para = Paragraph::new(filedata.clone())
-                .block(Block::default().title(filenameonly).borders(Borders::all()))
-                .style(Style::default().bg(Color::Magenta).fg(Color::Blue));
+                .block(
+                    Block::default()
+                        .title(format!(" 📜 {} (Shift + Up/Down to scroll) ", filenameonly)), // Updated instructions
+                )
+                .style(Style::default().bg(Color::Magenta).fg(Color::Blue))
+                .scroll((app.scroll, 0));
 
             // that error stored by the error_message is now being handled
             // if the error is there then there is no possibility for displaying the content
@@ -361,6 +402,7 @@ fn main() -> std::io::Result<()> {
                 // set the global entered true such that the file content or the error displays
                 (KeyCode::Enter, KeyModifiers::NONE) => {
                     entered = true;
+                    app.reset_scroll();
                 }
                 (KeyCode::Char('b'), KeyModifiers::NONE) => {
                     //we should use the parent() to find the files parent
@@ -372,6 +414,7 @@ fn main() -> std::io::Result<()> {
 
                         //update the apps latest changes
                         app.update_app();
+                        app.reset_scroll();
                     }
                 }
 
@@ -432,6 +475,14 @@ fn main() -> std::io::Result<()> {
                     } else {
                         //if something fails print
                         eprintln!("No file content to paste.");
+                    }
+                }
+                (KeyCode::Up, KeyModifiers::SHIFT) => {
+                    app.scroll_up();
+                }
+                (KeyCode::Down, KeyModifiers::SHIFT) => {
+                    if app.selectedfile.is_some() && error_message.is_none() {
+                        app.scroll_down();
                     }
                 }
 
