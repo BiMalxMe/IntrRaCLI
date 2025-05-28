@@ -61,7 +61,8 @@ struct App {
     renamedinput: String,
     // New field for scroll position
     scroll: u16,
-    filesmaxlines : u16
+    filesmaxlines : u16,
+    wannadelete : bool,
 }
 
 //implemeting the steuct to get functions like prev and next and new
@@ -86,7 +87,8 @@ impl App {
             dialogueboxappear: false,
             renamedinput: String::new(),
             scroll: 0,
-            filesmaxlines: 0
+            filesmaxlines: 0,
+            wannadelete : false,
         }
     }
     //for toggling the value of the
@@ -96,6 +98,9 @@ impl App {
         if !self.dialogueboxappear {
             self.renamedinput.clear();
         }
+    }
+    fn toggle_delete(&mut self){
+        self.wannadelete = !self.wannadelete;
     }
     fn handle_dialog_input(&mut self, key: KeyEvent) {
         match key.code {
@@ -330,7 +335,7 @@ fn main() -> std::io::Result<()> {
                     Block::default()
                         .title(format!(" 📜 {} (Shift + Up/Down to scroll) ", filenameonly)), // Updated instructions
                 )
-                .style(Style::default().bg(Color::Magenta).fg(Color::Blue))
+                .style(Style::default().bg(Color::DarkGray).fg(Color::Blue))
                 .scroll((app.scroll, 0));
 
             // that error stored by the error_message is now being handled
@@ -384,6 +389,21 @@ fn main() -> std::io::Result<()> {
                 let area = centered_rect(60, 25, size);
                 f.render_widget(Clear, area); // Clear background for transparency
                 f.render_widget(paragraph, area);
+            }
+            if app.wannadelete {
+                let block = Block::default()
+                    .title(" Delete Confirmation (ESC to close) ")
+                    .borders(Borders::ALL)
+                    .style(Style::default().bg(Color::DarkGray));
+            
+                let dialog = Paragraph::new("⚠️  Are you sure you want to delete this file?\nPress 'y' to confirm, 'n' to cancel.")
+                    .block(block)
+                    .style(Style::default().bg(Color::Black).fg(Color::Red));
+            
+                // draw the popup in the center of the screen
+                let area = centered_rect(60, 25, size);
+                f.render_widget(Clear, area); // clear underlying widgets
+                f.render_widget(dialog, area);
             }
         })?;
         if let Event::Key(key) = event::read()? {
@@ -485,7 +505,9 @@ fn main() -> std::io::Result<()> {
                         app.scroll_down();
                     }
                 }
-
+                (KeyCode::Delete, KeyModifiers::NONE) if !app.wannadelete => {
+                    app.toggle_delete();
+                }
                 //handle other innecessary keypress
                 _ => {}
             }
