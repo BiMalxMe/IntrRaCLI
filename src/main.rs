@@ -59,7 +59,8 @@ impl CopyFiles {
 
 enum FileType {
     File,
-    Folder
+    Folder,
+    None
 }
 
 struct App {
@@ -74,7 +75,8 @@ struct App {
     filesmaxlines : u16,
     wannadelete : bool,
     deletedsucessfully : bool,
-    wannacreate : bool
+    wannacreate : bool,
+    creationtype : FileType
 
 }
 
@@ -103,7 +105,8 @@ impl App {
             filesmaxlines: 0,
             wannadelete : false,
             deletedsucessfully : false,
-            wannacreate : false
+            wannacreate : false,
+            creationtype : FileType::None
         }
     }
     //for toggling the value of the
@@ -282,7 +285,25 @@ impl App {
     
     //logic for creating a new folder/file
     fn toggle_creation(&mut self){
-        self.wannacreate = true;
+        self.wannacreate = !self.wannacreate;
+    }
+    fn handle_creation(&mut self,key: KeyEvent){
+        
+        match key.code {
+        // if  m or f is pressed the dialogue box of creation diappers
+            KeyCode::Char('m') => {
+                //folder logic
+               self.creationtype = FileType::Folder;
+               self.toggle_creation();
+
+            }
+            KeyCode::Char('f') => {
+                //creation of file logic
+                self.creationtype = FileType::File;
+                self.toggle_creation();
+            }
+            _ => {}
+        }
     }
 
 }
@@ -483,7 +504,9 @@ fn main() -> std::io::Result<()> {
                 f.render_widget(Clear, area); // clear underlying widgets
                 f.render_widget(dialog, area);
             }
+            
             if app.wannacreate {
+
                 let block = Block::default()
                     .title(Span::styled(" New Creation ", Style::default().fg(Color::White).add_modifier(Modifier::BOLD))) // Title text color and bold
                     .borders(Borders::ALL)
@@ -500,6 +523,44 @@ fn main() -> std::io::Result<()> {
                 f.render_widget(Clear, area); // clear underlying widgets
                 f.render_widget(dialog, area);
             }
+            match app.creationtype {
+               FileType::None => {},
+               FileType::File => {
+                //get the centered rectangular corresponding to the parent one
+                let area = centered_rect(70, 80, size);
+                //create a top level chunk to distribute the vertical layout
+                let chunkss = Layout::default()
+                   .direction(Direction::Vertical)
+                  .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
+                  //according to centered area
+                  .margin(1)
+                 .split(area);
+
+               //filename one
+                 let upperone = Paragraph::new("Enter a filename With extension")
+                 .block(
+                    Block::default()
+                      .borders(Borders::all())
+                          .style(Style::default().bg(Color::Black)), // Set background color
+                             );
+
+                             //filecontent one
+                let lowerone = Paragraph::new("paste the content inside it")
+                     .block(
+                           Block::default()
+                          .borders(Borders::all())
+                             .style(Style::default().bg(Color::Black)), // Set background color
+                                );
+                                //clear the space
+                f.render_widget(Clear, area);
+                // render the datas
+                f.render_widget(upperone, chunkss[0]);
+                f.render_widget(lowerone, chunkss[1]);
+
+               },
+               FileType::Folder => {},
+            }
+
         })?;
         if let Event::Key(key) = event::read()? {
             if app.dialogueboxappear {
@@ -517,6 +578,15 @@ fn main() -> std::io::Result<()> {
                     KeyCode::Esc => app.toggle_delete(),
                     //else transfer the other keyevent handler in handle_delete function
                     _ => app.handle_delete(key),
+                }
+                continue;
+            }
+            if app.wannacreate{
+                match key.code {
+                    //exit the dialogue box for  the creation
+                   KeyCode::Esc => app.wannacreate = false,
+                   //else
+                   _ => app.handle_creation(key), 
                 }
             }
             match (key.code, key.modifiers) {
