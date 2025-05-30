@@ -1,3 +1,4 @@
+use std::fs;
 use std::io::Write;
 use std::{
     fs::{File, read_to_string},
@@ -11,6 +12,10 @@ use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
+use ratatui::layout::Alignment;
+use ratatui::style::Modifier;
+use ratatui::text::Span;
+use ratatui::widgets::BorderType;
 use ratatui::{
     Terminal,
     layout::{Constraint, Direction, Layout},
@@ -52,6 +57,11 @@ impl CopyFiles {
     }
 }
 
+enum FileType {
+    File,
+    Folder
+}
+
 struct App {
     selected: usize,
     data: Vec<(String, PathBuf)>,
@@ -63,6 +73,9 @@ struct App {
     scroll: u16,
     filesmaxlines : u16,
     wannadelete : bool,
+    deletedsucessfully : bool,
+    wannacreate : bool
+
 }
 
 //implemeting the steuct to get functions like prev and next and new
@@ -89,6 +102,8 @@ impl App {
             scroll: 0,
             filesmaxlines: 0,
             wannadelete : false,
+            deletedsucessfully : false,
+            wannacreate : false
         }
     }
     //for toggling the value of the
@@ -101,6 +116,52 @@ impl App {
     }
     fn toggle_delete(&mut self){
         self.wannadelete = !self.wannadelete;
+    }
+    fn handle_delete(&mut self, key: KeyEvent){
+        match key.code {
+            KeyCode::Enter => {
+                //get the current selected path
+                if let Some((_, path)) = self.data.get(self.selected) {
+                    // if path is a directory
+                    if path.is_dir() {
+                        //removes folder and its contents
+                        match fs::remove_dir_all(path) {
+                            Ok(_) => {
+                                self.deletedsucessfully = true;
+                            }
+                            Err(e) => {
+                                eprintln!("Error deleting directory '{:?}': {}", path, e);
+                            }
+                        }
+                        //if the path is file type
+                    } else if path.is_file() {
+                        match fs::remove_file(path) {
+                            Ok(_) => {
+                                self.deletedsucessfully = true;
+                            }
+                            Err(e) => {
+                                eprintln!("Error deleting file '{:?}': {}", path, e);
+                            }
+                        }
+                    } else {
+                        //else cannot
+                        eprintln!("Cannot delete: '{:?}' is not a file or directory.", path);
+                    }
+                } else {
+                    //if path is not valid 
+                    eprintln!("No item selected for deletion.");
+                }
+            }
+            _ => {}
+        }
+        if self.deletedsucessfully{
+            // change the selection from deleted path to none
+            self.selectedfile = None;
+            self.deletedsucessfully = false;
+
+        }
+        self.update_app();
+        self.toggle_delete();
     }
     fn handle_dialog_input(&mut self, key: KeyEvent) {
         match key.code {
@@ -218,6 +279,12 @@ impl App {
     fn reset_scroll(&mut self) {
         self.scroll = 0;
     }
+    
+    //logic for creating a new folder/file
+    fn toggle_creation(&mut self){
+        self.wannacreate = true;
+    }
+
 }
 
 fn main() -> std::io::Result<()> {
@@ -233,7 +300,10 @@ fn main() -> std::io::Result<()> {
             .unwrap_or_else(|| PathBuf::from("./"))
             .into(),
     );
-
+    if app.deletedsucessfully{
+        filedata.clear();
+        app.deletedsucessfully = false;
+    }
     let filelist = app.data.clone();
 
     // if the file has no content then print the error
@@ -265,23 +335,29 @@ fn main() -> std::io::Result<()> {
                     entered = false;
                     continue;
                 }
-
-                // File case: Try to read
-                match read_to_string(path) {
-                    Ok(content) => {
-                        app.selectedfile = Some(path.clone());
-                        filedata = content;
-                        error_message = None;
-                    }
-                    Err(e) => {
-                        error_message = Some(format!("Error reading file: {}", e));
-                        filedata.clear();
+        
+                // Check if file exists before trying to read
+                if !path.exists() {
+                    error_message = Some("File no longer exists".to_string());
+                    filedata.clear();
+                    app.selectedfile = None;
+                } else {
+                    // File case: Try to read
+                    match read_to_string(path) {
+                        Ok(content) => {
+                            app.selectedfile = Some(path.clone());
+                            filedata = content;
+                            error_message = None;
+                        }
+                        Err(e) => {
+                            error_message = Some(format!("Error reading file: {}", e));
+                            filedata.clear();
+                        }
                     }
                 }
             }
             entered = false;
         }
-
         terminal.draw(|f| {
             let size = f.area();
 
@@ -312,10 +388,12 @@ fn main() -> std::io::Result<()> {
                 .highlight_style(Style::default().bg(Color::Cyan).fg(Color::Blue));
 
             // extract the filename from the pathBuf
-            let filenameonly: String = app.selectedfile.as_ref().map_or_else(
-                || "No file selected".to_string(), // If app.selectedfile is None
-                |path_buf| path_buf.to_string_lossy().into_owned(), // If Some(path_buf), convert to owned String
-            );
+            let filenameonly = if let Some(path) = &app.selectedfile {
+                path.to_string_lossy().into_owned()
+            } else {
+                filedata.clear();
+                "No file selected".to_string()
+            };
             // file ko line
             let content_lines = filedata.lines().count() as u16;
             // Terminal ko size
@@ -396,12 +474,29 @@ fn main() -> std::io::Result<()> {
                     .borders(Borders::ALL)
                     .style(Style::default().bg(Color::DarkGray));
             
-                let dialog = Paragraph::new("⚠️  Are you sure you want to delete this file?\nPress 'y' to confirm, 'n' to cancel.")
+                let dialog = Paragraph::new("⚠️  Are you sure you want to delete this file?\nPress Enter to confirm, 'Esc' to cancel.")
                     .block(block)
                     .style(Style::default().bg(Color::Black).fg(Color::Red));
             
                 // draw the popup in the center of the screen
-                let area = centered_rect(60, 25, size);
+                let area = centered_rect(40, 16, size);
+                f.render_widget(Clear, area); // clear underlying widgets
+                f.render_widget(dialog, area);
+            }
+            if app.wannacreate {
+                let block = Block::default()
+                    .title(Span::styled(" New Creation ", Style::default().fg(Color::White).add_modifier(Modifier::BOLD))) // Title text color and bold
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded) // Example: Rounded borders
+                    .style(Style::default().bg(Color::DarkGray)); // A more subtle background for the block
+            
+                let dialog = Paragraph::new("Enter \"f\" for creating file and \"m\" for creating folder.")
+                    .alignment(Alignment::Center) // Center the text within the paragraph
+                    .block(block)
+                    .style(Style::default().fg(Color::LightCyan).bg(Color::DarkGray)); // LightCyan text on DarkGray background
+            
+                // draw the popup in the center of the screen
+                let area = centered_rect(60, 20, size);
                 f.render_widget(Clear, area); // clear underlying widgets
                 f.render_widget(dialog, area);
             }
@@ -414,6 +509,15 @@ fn main() -> std::io::Result<()> {
                     _ => app.handle_dialog_input(key),
                 }
                 continue;
+            }
+            //if the wannadelete is true
+            if app.wannadelete {
+                match key.code {
+                    //if Esc then close it 
+                    KeyCode::Esc => app.toggle_delete(),
+                    //else transfer the other keyevent handler in handle_delete function
+                    _ => app.handle_delete(key),
+                }
             }
             match (key.code, key.modifiers) {
                 (KeyCode::Char('q'), KeyModifiers::NONE) => break,
@@ -459,6 +563,10 @@ fn main() -> std::io::Result<()> {
                 (KeyCode::Char('r'), KeyModifiers::CONTROL) => {
                     app.toggle_dialog();
                 }
+                (KeyCode::Char('n'),KeyModifiers::CONTROL) => {
+                    //do something
+                    app.toggle_creation();
+                }
                 // on clicking the ctrl
                 (KeyCode::Char('v'), KeyModifiers::CONTROL) => {
                     //get the filename and content from the file we copied from
@@ -493,7 +601,7 @@ fn main() -> std::io::Result<()> {
                             }
                         }
                     } else {
-                        //if something fails print
+                        //if something fails printf
                         eprintln!("No file content to paste.");
                     }
                 }
@@ -505,7 +613,7 @@ fn main() -> std::io::Result<()> {
                         app.scroll_down();
                     }
                 }
-                (KeyCode::Delete, KeyModifiers::NONE) if !app.wannadelete => {
+                (KeyCode::Backspace, KeyModifiers::NONE) if !app.wannadelete => {
                     app.toggle_delete();
                 }
                 //handle other innecessary keypress
