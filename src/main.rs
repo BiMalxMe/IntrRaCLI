@@ -79,38 +79,35 @@ struct App {
     creationtype : FileType
 }
 
+//adding this will allow us to add logical syntaxes
+#[derive(PartialEq)]
+enum FileDialogSection {
+    Filename,
+    Content,
+}
+
 struct Newcontent {
     filename: Option<String>,
     filecontent: Option<String>,
     foldername: Option<String>,
-    //current input holds the current inputed data while nameing a file or folder
-    currentinput : String
+    currentinput: String,
+    active_section: FileDialogSection,  // Add this field
+    filename_input: String,  // Separate field for filename input
+    content_input: String,   // Separate field for content input
 }
 
 impl Newcontent {
-    // The 'new' function typically returns a new instance of the struct.
-    fn new(
-        filename: Option<String>,
-        filecontent: Option<String>,
-        foldername: Option<String>,
-    ) -> Self {
+    fn new() -> Self {
         Newcontent {
-            filename,      // Shorthand for filename: filename
-            filecontent,   // Shorthand for filecontent: filecontent
-            foldername,
-            currentinput : String::new()    // Shorthand for foldername: foldername
+            filename: None,
+            filecontent: None,
+            foldername: None,
+            currentinput: String::new(),
+            active_section: FileDialogSection::Filename,
+            filename_input: String::new(),
+            content_input: String::new(),
         }
     }
-    fn create_new_filename(&mut self, filename : String){
-        self.filename = Some(filename)
-    }
-    fn create_new_filecontent(&mut self, filecontent : String){
-        self.filecontent = Some(filecontent)
-    }
-    fn create_new_foldername(&mut self, foldername : String){
-        self.foldername = Some(foldername)
-    }
-    
 }
 
 //implemeting the steuct to get functions like prev and next and new
@@ -342,7 +339,7 @@ impl App {
 }
 
 fn main() -> std::io::Result<()> {
-    let mut create_new_file_and_folder = Newcontent::new(None, None, None);
+    let mut create_new_file_and_folder = Newcontent::new();
     // Contents of the file
     let mut filedata = String::new();
     //Only on the first enter it displays the datas
@@ -560,38 +557,43 @@ fn main() -> std::io::Result<()> {
             match app.creationtype {
                FileType::None => {},
                FileType::File => {
-                //get the centered rectangular corresponding to the parent one
                 let area = centered_rect(40, 50, size);
-                //create a top level chunk to distribute the vertical layout
-                let chunkss = Layout::default()
-                   .direction(Direction::Vertical)
-                  .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
-                  //according to centered area
-                  .margin(1)
-                 .split(area);
-
-               //filename one
-                 let upperone = Paragraph::new("Enter a filename With extension")
-                 .block(
-                    Block::default()
-                      .borders(Borders::all())
-                          .style(Style::default().bg(Color::Black)), // Set background color
-                             );
-
-                             //filecontent one
-                let lowerone = Paragraph::new("paste the content inside it")
-                     .block(
-                           Block::default()
-                          .borders(Borders::all())
-                             .style(Style::default().bg(Color::Black)), // Set background color
-                                );
-                                //clear the space
+                let chunks = Layout::default()
+                    .direction(Direction::Vertical)
+                    .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
+                    .margin(1)
+                    .split(area);
+            
+                // Filename box with conditional styling
+                let filename_block = Block::default()
+                    .title(" Filename (Tab to switch) ")
+                    .borders(Borders::ALL)
+                    .style(if create_new_file_and_folder.active_section == FileDialogSection::Filename {
+                        Style::default().bg(Color::Rgb(50, 50, 50)).fg(Color::Yellow)
+                    } else {
+                        Style::default().bg(Color::Black).fg(Color::Gray)
+                    });
+            
+                let upperone = Paragraph::new(create_new_file_and_folder.filename_input.as_str())
+                    .block(filename_block);
+            
+                // Content box with conditional styling
+                let content_block = Block::default()
+                    .title(" Content (Tab to switch) ")
+                    .borders(Borders::ALL)
+                    .style(if create_new_file_and_folder.active_section == FileDialogSection::Content {
+                        Style::default().bg(Color::Rgb(50, 50, 50)).fg(Color::Yellow)
+                    } else {
+                        Style::default().bg(Color::Black).fg(Color::Gray)
+                    });
+            
+                let lowerone = Paragraph::new(create_new_file_and_folder.content_input.as_str())
+                    .block(content_block);
+            
                 f.render_widget(Clear, area);
-                // render the datas
-                f.render_widget(upperone, chunkss[0]);
-                f.render_widget(lowerone, chunkss[1]);
-
-               },
+                f.render_widget(upperone, chunks[0]);
+                f.render_widget(lowerone, chunks[1]);
+            }
                FileType::Folder => {
                 let block = Block::default()
                 .title(Span::styled(" Create a Folder ", Style::default().fg(Color::White).add_modifier(Modifier::BOLD))) // Title text color and bold
@@ -670,7 +672,76 @@ fn main() -> std::io::Result<()> {
                     }
                 }
                 FileType::File => {
+                    match key.code {
+                        // Tab switches between filename and content sections
+                        KeyCode::Tab => {
+                            create_new_file_and_folder.active_section = match create_new_file_and_folder.active_section {
+                                FileDialogSection::Filename => FileDialogSection::Content,
+                                FileDialogSection::Content => FileDialogSection::Filename,
+                            };
+                        }
+                        // Handle input based on active section
+                        KeyCode::Char(c) => {
+                            match create_new_file_and_folder.active_section {
+                                FileDialogSection::Filename => {
+                                    create_new_file_and_folder.filename_input.push(c);
+                                    continue;
 
+                                }
+                                FileDialogSection::Content => {
+                                    create_new_file_and_folder.content_input.push(c);
+                                    continue;
+
+                                }
+                            }
+                        }
+                        KeyCode::Backspace => {
+                            match create_new_file_and_folder.active_section {
+                                //for filename input
+                                FileDialogSection::Filename => {
+                                    create_new_file_and_folder.filename_input.pop();
+                                }
+                                //for filecontent input
+                                FileDialogSection::Content => {
+                                    create_new_file_and_folder.content_input.pop();
+                                }
+                            }
+                        }
+                        KeyCode::Enter => {
+                            if !create_new_file_and_folder.filename_input.is_empty() {
+                                //only if the path is file
+                                let mut new_file_path = if app.currentpath.is_file() {
+                                    app.currentpath.parent().unwrap_or(&app.currentpath).to_path_buf()
+                                } else {
+                                    //else normal
+                                    app.currentpath.clone()
+                                };
+                                //make a pathbuf including the filename
+                                new_file_path.push(&create_new_file_and_folder.filename_input);
+                                
+                                //make a file with the cintent inside
+                                match File::create(&new_file_path) {
+                                    Ok(mut file) => {
+                                        if !create_new_file_and_folder.content_input.is_empty() {
+                                            //if the user had inputed the content too then write inside the made file
+                                            file.write_all(create_new_file_and_folder.content_input.as_bytes()).ok();
+                                        }
+                                        app.update_app();
+                                        app.creationtype = FileType::None;
+                                        app.wannacreate = false;
+                                        create_new_file_and_folder = Newcontent::new();
+                                    }
+                                    Err(e) => error_message = Some(format!("Failed to create file: {}", e)),
+                                }
+                            }
+                        }
+                        KeyCode::Esc => {
+                            app.creationtype = FileType::None;
+                            app.wannacreate = false;
+                            create_new_file_and_folder = Newcontent::new();
+                        }
+                        _ => {}
+                    }
                 }
                 _ => {}
             }
