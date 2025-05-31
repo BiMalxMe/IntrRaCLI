@@ -77,7 +77,40 @@ struct App {
     deletedsucessfully : bool,
     wannacreate : bool,
     creationtype : FileType
+}
 
+struct Newcontent {
+    filename: Option<String>,
+    filecontent: Option<String>,
+    foldername: Option<String>,
+    //current input holds the current inputed data while nameing a file or folder
+    currentinput : String
+}
+
+impl Newcontent {
+    // The 'new' function typically returns a new instance of the struct.
+    fn new(
+        filename: Option<String>,
+        filecontent: Option<String>,
+        foldername: Option<String>,
+    ) -> Self {
+        Newcontent {
+            filename,      // Shorthand for filename: filename
+            filecontent,   // Shorthand for filecontent: filecontent
+            foldername,
+            currentinput : String::new()    // Shorthand for foldername: foldername
+        }
+    }
+    fn create_new_filename(&mut self, filename : String){
+        self.filename = Some(filename)
+    }
+    fn create_new_filecontent(&mut self, filecontent : String){
+        self.filecontent = Some(filecontent)
+    }
+    fn create_new_foldername(&mut self, foldername : String){
+        self.foldername = Some(foldername)
+    }
+    
 }
 
 //implemeting the steuct to get functions like prev and next and new
@@ -309,6 +342,7 @@ impl App {
 }
 
 fn main() -> std::io::Result<()> {
+    let mut create_new_file_and_folder = Newcontent::new(None, None, None);
     // Contents of the file
     let mut filedata = String::new();
     //Only on the first enter it displays the datas
@@ -527,7 +561,7 @@ fn main() -> std::io::Result<()> {
                FileType::None => {},
                FileType::File => {
                 //get the centered rectangular corresponding to the parent one
-                let area = centered_rect(70, 80, size);
+                let area = centered_rect(40, 50, size);
                 //create a top level chunk to distribute the vertical layout
                 let chunkss = Layout::default()
                    .direction(Direction::Vertical)
@@ -558,11 +592,88 @@ fn main() -> std::io::Result<()> {
                 f.render_widget(lowerone, chunkss[1]);
 
                },
-               FileType::Folder => {},
+               FileType::Folder => {
+                let block = Block::default()
+                .title(Span::styled(" Create a Folder ", Style::default().fg(Color::White).add_modifier(Modifier::BOLD))) // Title text color and bold
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded) // Example: Rounded borders
+                .style(Style::default().bg(Color::DarkGray)); 
+
+                  
+            let dialog: Paragraph<'_> = Paragraph::new(create_new_file_and_folder.currentinput.as_str())
+                .alignment(Alignment::Center) // Center the text within the paragraph
+                .block(block)
+                .style(Style::default().fg(Color::White).bg(Color::DarkGray)); // LightCyan text on DarkGray background
+        
+            // draw the popup in the center of the screen
+            let area = centered_rect(30, 20, size);
+            f.render_widget(Clear, area); // clear underlying widgets
+            f.render_widget(dialog, area);
+               },
             }
 
         })?;
         if let Event::Key(key) = event::read()? {
+            match app.creationtype{
+                FileType::Folder => {
+                    match key.code {
+                        //if anykey is pressed
+                        KeyCode::Char(c) => {
+                            //push into the global string catcher
+                            create_new_file_and_folder.currentinput.push(c);
+                            continue;
+                        }
+                        KeyCode::Backspace => {
+                            //if backspace then remove the last letter from the global string
+                            create_new_file_and_folder.currentinput.pop();
+                            continue;
+                        }
+                        //if entered thenn
+                        KeyCode::Enter => {
+                            //if not empty
+                            if !create_new_file_and_folder.currentinput.is_empty() {
+                                //get the currentpath where ctrl n is pressed
+                                // its like users/bimal/all/
+                                let mut new_folder_path = app.currentpath.clone();
+
+                                //add the foldername in the new_folder path
+                                // if newfoldername is rust
+                                //then new_folder_path will be users/bimal/all/rust
+                                new_folder_path.push(&create_new_file_and_folder.currentinput);
+                                
+                                //creates the directory in the path modified
+                                match fs::create_dir(&new_folder_path) {
+                                    Ok(_) => {
+                                        //after change in the folder structure , I reloads the waldir configs
+                                        app.update_app();
+                                        app.creationtype = FileType::None;
+                                        //flags to default
+                                        app.wannacreate = false;
+                                        // insert into the structs foldername element (Optional not need right now)
+                                        create_new_file_and_folder.foldername = Some(create_new_file_and_folder.currentinput.clone());
+                                        //clears the input
+                                        create_new_file_and_folder.currentinput.clear();
+                                    }
+                                    Err(e) => {
+                                        error_message = Some(format!("Failed to create folder: {}", e));
+                                    }
+                                }
+                            }
+                        }
+                        KeyCode::Esc => {
+                            app.creationtype = FileType::None;
+                            app.wannacreate = false;
+                            create_new_file_and_folder.currentinput.clear();
+                            continue;
+                        }
+                        _ => {}
+                    }
+                }
+                FileType::File => {
+
+                }
+                _ => {}
+            }
             if app.dialogueboxappear {
                 match key.code {
                     KeyCode::Esc => app.toggle_dialog(),
